@@ -76,19 +76,22 @@
         }
     },
     "config": {
-        "optimize-autoloader": true,
-        "preferred-install": "dist",
-        "sort-packages": true,
-        "allow-plugins": {
-            "pestphp/pest-plugin": true,
-            "php-http/discovery": true
-        },
-        "policy": {
-            "advisories": {
-                "block": false
-            }
-        }
+    "optimize-autoloader": true,
+    "platform": {
+        "php": "8.4.8"
     },
+    "preferred-install": "dist",
+    "sort-packages": true,
+    "allow-plugins": {
+        "pestphp/pest-plugin": true,
+        "php-http/discovery": true
+    },
+    "policy": {
+        "advisories": {
+            "block": false
+        }
+    }
+},
     "minimum-stability": "stable",
     "prefer-stable": true,
     "repositories": [{
