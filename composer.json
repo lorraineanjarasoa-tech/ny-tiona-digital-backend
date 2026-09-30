@@ -87,6 +87,8 @@
             "advisories": {
                 "block": false
             }
+        },
+        "platform": {
         }
     },
     "minimum-stability": "stable",
