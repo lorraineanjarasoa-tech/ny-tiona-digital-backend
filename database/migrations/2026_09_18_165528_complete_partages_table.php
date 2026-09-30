@@ -9,31 +9,46 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('partages', function (Blueprint $table) {
-            // Relation utilisateur
-            $table->uuid('user_id')->after('id');
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            // Relation utilisateur (sans ->after() pour PostgreSQL)
+            if (!Schema::hasColumn('partages', 'user_id')) {
+                $table->uuid('user_id')->nullable();
+                $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+            }
 
             // Contenu
-            $table->string('titre', 150)->nullable()->after('user_id');
-            $table->text('contenu')->nullable()->after('titre');
+            if (!Schema::hasColumn('partages', 'titre')) {
+                $table->string('titre', 150)->nullable();
+            }
+            if (!Schema::hasColumn('partages', 'contenu')) {
+                $table->text('contenu')->nullable();
+            }
 
             // Média
-            $table->string('media_path')->nullable()->after('contenu');
-            $table->string('media_type')->nullable()->after('media_path'); // image, video, document
-            $table->string('media_mime')->nullable()->after('media_type');
-            $table->bigInteger('media_size')->nullable()->after('media_mime');
+            if (!Schema::hasColumn('partages', 'media_path')) {
+                $table->string('media_path')->nullable();
+            }
+            if (!Schema::hasColumn('partages', 'media_type')) {
+                $table->string('media_type')->nullable();
+            }
+            if (!Schema::hasColumn('partages', 'media_mime')) {
+                $table->string('media_mime')->nullable();
+            }
+            if (!Schema::hasColumn('partages', 'media_size')) {
+                $table->bigInteger('media_size')->nullable();
+            }
 
-            // Visibilité (public, etudiants, formateurs, ma_formation, prive)
-            $table->string('visibilite')->default('public')->after('media_size');
+            // Visibilité
+            if (!Schema::hasColumn('partages', 'visibilite')) {
+                $table->string('visibilite')->default('public');
+            }
 
             // Stats
-            $table->integer('likes_count')->default(0)->after('visibilite');
-            $table->integer('views_count')->default(0)->after('likes_count');
-
-            // Index pour la performance
-            $table->index('user_id');
-            $table->index('visibilite');
-            $table->index('created_at');
+            if (!Schema::hasColumn('partages', 'likes_count')) {
+                $table->integer('likes_count')->default(0);
+            }
+            if (!Schema::hasColumn('partages', 'views_count')) {
+                $table->integer('views_count')->default(0);
+            }
         });
     }
 
@@ -41,9 +56,6 @@ return new class extends Migration
     {
         Schema::table('partages', function (Blueprint $table) {
             $table->dropForeign(['user_id']);
-            $table->dropIndex(['user_id']);
-            $table->dropIndex(['visibilite']);
-            $table->dropIndex(['created_at']);
             $table->dropColumn([
                 'user_id',
                 'titre',
