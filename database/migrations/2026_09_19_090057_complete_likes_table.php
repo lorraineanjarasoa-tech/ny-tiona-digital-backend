@@ -9,18 +9,20 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('likes', function (Blueprint $table) {
-            $table->unsignedBigInteger('partage_id')->after('id');
-            $table->uuid('user_id')->after('partage_id');
+            if (!Schema::hasColumn('likes', 'partage_id')) {
+                $table->unsignedBigInteger('partage_id')->nullable();
+                $table->foreign('partage_id')
+                    ->references('id')->on('partages')
+                    ->onDelete('cascade');
+            }
 
-            $table->foreign('partage_id')
-                ->references('id')->on('partages')
-                ->onDelete('cascade');
+            if (!Schema::hasColumn('likes', 'user_id')) {
+                $table->uuid('user_id')->nullable();
+                $table->foreign('user_id')
+                    ->references('id')->on('users')
+                    ->onDelete('cascade');
+            }
 
-            $table->foreign('user_id')
-                ->references('id')->on('users')
-                ->onDelete('cascade');
-
-            // Un utilisateur ne peut liker qu'une fois par partage
             $table->unique(['partage_id', 'user_id']);
         });
     }

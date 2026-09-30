@@ -9,19 +9,23 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('commentaires', function (Blueprint $table) {
-            $table->unsignedBigInteger('partage_id')->after('id');
-            $table->uuid('user_id')->after('partage_id');
-            $table->text('contenu')->after('user_id');
+            if (!Schema::hasColumn('commentaires', 'partage_id')) {
+                $table->unsignedBigInteger('partage_id')->nullable();
+                $table->foreign('partage_id')
+                    ->references('id')->on('partages')
+                    ->onDelete('cascade');
+            }
 
-            $table->foreign('partage_id')
-                ->references('id')->on('partages')
-                ->onDelete('cascade');
+            if (!Schema::hasColumn('commentaires', 'user_id')) {
+                $table->uuid('user_id')->nullable();
+                $table->foreign('user_id')
+                    ->references('id')->on('users')
+                    ->onDelete('cascade');
+            }
 
-            $table->foreign('user_id')
-                ->references('id')->on('users')
-                ->onDelete('cascade');
-
-            $table->index('partage_id');
+            if (!Schema::hasColumn('commentaires', 'contenu')) {
+                $table->text('contenu')->nullable();
+            }
         });
     }
 
@@ -30,7 +34,6 @@ return new class extends Migration
         Schema::table('commentaires', function (Blueprint $table) {
             $table->dropForeign(['partage_id']);
             $table->dropForeign(['user_id']);
-            $table->dropIndex(['partage_id']);
             $table->dropColumn(['partage_id', 'user_id', 'contenu']);
         });
     }

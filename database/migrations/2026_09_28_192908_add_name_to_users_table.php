@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('users', function (Blueprint $table) {
             if (!Schema::hasColumn('users', 'name')) {
-                $table->string('name')->nullable()->after('id');
+                $table->string('name')->nullable();
             }
         });
     }

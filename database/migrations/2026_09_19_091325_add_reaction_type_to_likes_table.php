@@ -9,8 +9,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('likes', function (Blueprint $table) {
-            // Type de réaction : like, love, haha, wow, sad, angry
-            $table->string('reaction_type')->default('like')->after('user_id');
+            if (!Schema::hasColumn('likes', 'reaction_type')) {
+                $table->string('reaction_type')->default('like');
+            }
         });
     }
 
