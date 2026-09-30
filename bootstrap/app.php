@@ -13,33 +13,17 @@ return Application::configure(basePath: dirname(__DIR__))
     )
 
     ->withMiddleware(function (Middleware $middleware) {
+        // Middleware CORS officiel de Laravel
+        $middleware->api(prepend: [
+            \Illuminate\Http\Middleware\HandleCors::class,
+        ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | CORS
-        |--------------------------------------------------------------------------
-        */
-
-        $middleware->append(
-            \App\Http\Middleware\CorsMiddleware::class
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | Middleware aliases
-        |--------------------------------------------------------------------------
-        */
-
+        // Alias existants
         $middleware->alias([
             'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
 
-        /*
-        |--------------------------------------------------------------------------
-        | CSRF
-        |--------------------------------------------------------------------------
-        */
-
+        // CSRF exempt pour l'API
         $middleware->validateCsrfTokens(except: [
             'api/*',
         ]);
