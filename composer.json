@@ -89,6 +89,7 @@
             }
         },
         "platform": {
+            "php": "8.3.15"
         }
     },
     "minimum-stability": "stable",
