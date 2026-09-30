@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -22,9 +23,19 @@ return new class extends Migration
                     ->references('id')->on('users')
                     ->onDelete('cascade');
             }
-
-            $table->unique(['partage_id', 'user_id']);
         });
+
+        // Ajouter la contrainte unique seulement si elle n'existe pas
+        $exists = DB::selectOne("
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'likes_partage_id_user_id_unique'
+        ");
+
+        if (!$exists) {
+            Schema::table('likes', function (Blueprint $table) {
+                $table->unique(['partage_id', 'user_id']);
+            });
+        }
     }
 
     public function down(): void
