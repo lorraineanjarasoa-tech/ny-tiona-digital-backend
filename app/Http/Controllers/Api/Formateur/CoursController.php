@@ -34,12 +34,11 @@ class CoursController extends Controller
                         'document' => $c->document,
                         'image' => $c->image,
                         'niveau' => $c->niveau ?? 'debutant',
-                        'duree_heures' => $c->duree_heures ?? 0,
-                        'duree' => $c->duree_heures ?? 0,
                         'ordre' => $c->ordre ?? 0,
                         'statut' => $c->statut ?? 'brouillon',
                         'est_visible' => (bool) $c->est_visible,
                         'is_active' => (bool) $c->est_visible,
+                        'etudiants_count' => $c->etudiants_count,
                         'formation_id' => $c->formation_id,
                         'formation' => $c->formation,
                         'date_publication' => $c->date_publication,
@@ -50,7 +49,60 @@ class CoursController extends Controller
             return response()->json($cours);
         } catch (\Exception $e) {
             Log::error('CoursController@index : ' . $e->getMessage());
-            return response()->json([], 200);
+            return response()->json([
+                'error' => true,
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /* ==============================================================
+     * AFFICHER UN COURS
+     * GET /formateur/cours/{id}
+     * ============================================================== */
+    public function show(Request $request, $id)
+    {
+        try {
+            $cours = Cours::where('id', $id)
+                ->where('formateur_id', $request->user()->id)
+                ->with('formation:id,titre')
+                ->first();
+
+            if (!$cours) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Cours introuvable ou accès non autorisé.',
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $cours->id,
+                    'titre' => $cours->titre,
+                    'description' => $cours->description_courte,
+                    'description_longue' => $cours->description_longue,
+                    'video_url' => $cours->video_url,
+                    'document' => $cours->document,
+                    'image' => $cours->image,
+                    'niveau' => $cours->niveau ?? 'debutant',
+                    'ordre' => $cours->ordre ?? 0,
+                    'statut' => $cours->statut ?? 'brouillon',
+                    'est_visible' => (bool) $cours->est_visible,
+                    'is_active' => (bool) $cours->est_visible,
+                    'etudiants_count' => $cours->etudiants_count,
+                    'formation_id' => $cours->formation_id,
+                    'formation' => $cours->formation,
+                    'date_publication' => $cours->date_publication,
+                    'created_at' => $cours->created_at,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('CoursController@show : ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur : ' . $e->getMessage(),
+            ], 500);
         }
     }
 
@@ -70,7 +122,6 @@ class CoursController extends Controller
                 'document' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx|max:20480',
                 'formation_id' => 'nullable|exists:formations,id',
                 'niveau' => 'nullable|in:debutant,intermediaire,avance',
-                'duree_heures' => 'nullable|integer|min:0|max:9999',
                 'ordre' => 'nullable|integer|min:0',
                 'statut' => 'nullable|in:brouillon,actif,en_attente,termine',
                 'is_active' => 'nullable',
@@ -78,18 +129,15 @@ class CoursController extends Controller
 
             $videoUrl = $validated['video_url'] ?? null;
 
-            // Upload vidéo locale
             if ($request->hasFile('video_file')) {
                 $videoUrl = $request->file('video_file')->store('cours/videos', 'public');
             }
 
-            // Upload document
             $documentPath = null;
             if ($request->hasFile('document')) {
                 $documentPath = $request->file('document')->store('cours/documents', 'public');
             }
 
-            // Gestion du statut
             $isActive = filter_var($request->input('is_active', false), FILTER_VALIDATE_BOOLEAN);
             $statut = $validated['statut'] ?? ($isActive ? 'actif' : 'brouillon');
             if ($isActive && $statut === 'brouillon') {
@@ -105,7 +153,6 @@ class CoursController extends Controller
                 'video_url' => $videoUrl,
                 'document' => $documentPath,
                 'niveau' => $validated['niveau'] ?? 'debutant',
-                'duree_heures' => $validated['duree_heures'] ?? 0,
                 'ordre' => $validated['ordre'] ?? 0,
                 'statut' => $statut,
                 'est_visible' => $isActive,
@@ -153,13 +200,11 @@ class CoursController extends Controller
                 'document' => 'nullable|file|mimes:pdf,doc,docx,ppt,pptx|max:20480',
                 'formation_id' => 'nullable|exists:formations,id',
                 'niveau' => 'nullable|in:debutant,intermediaire,avance',
-                'duree_heures' => 'nullable|integer|min:0|max:9999',
                 'ordre' => 'nullable|integer|min:0',
                 'statut' => 'nullable|in:brouillon,actif,en_attente,termine',
                 'is_active' => 'nullable',
             ]);
 
-            // Nouveau fichier vidéo uploadé ?
             if ($request->hasFile('video_file')) {
                 if ($cours->video_url && !str_starts_with($cours->video_url, 'http')) {
                     Storage::disk('public')->delete($cours->video_url);
@@ -169,7 +214,6 @@ class CoursController extends Controller
                 $cours->video_url = $validated['video_url'];
             }
 
-            // Nouveau document ?
             if ($request->hasFile('document')) {
                 if ($cours->document) {
                     Storage::disk('public')->delete($cours->document);
@@ -192,14 +236,10 @@ class CoursController extends Controller
             if (isset($validated['niveau'])) {
                 $cours->niveau = $validated['niveau'];
             }
-            if (isset($validated['duree_heures'])) {
-                $cours->duree_heures = $validated['duree_heures'];
-            }
             if (isset($validated['ordre'])) {
                 $cours->ordre = $validated['ordre'];
             }
 
-            // Statut
             if ($request->has('is_active')) {
                 $isActive = filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN);
                 $cours->est_visible = $isActive;

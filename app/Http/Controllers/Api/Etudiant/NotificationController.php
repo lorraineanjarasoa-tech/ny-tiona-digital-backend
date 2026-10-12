@@ -8,21 +8,27 @@ use Illuminate\Http\Request;
 
 class NotificationController extends Controller
 {
-    /**
-     * Liste des notifications de l'étudiant connecté.
-     * GET /etudiant/notifications
-     */
     public function index(Request $request)
     {
-        $limit = (int) $request->query('limit', 30);
+        $user = $request->user();
 
-        $notifications = Notification::forUser($request->user()->id)
-            ->orderBy('created_at', 'desc')
-            ->limit($limit)
-            ->get();
+        $notifications = Notification::where('user_id', $user->id)
+            ->latest()
+            ->limit(50)
+            ->get()
+            ->map(fn($n) => [
+                'id' => $n->id,
+                'type' => $n->type,
+                'title' => $n->title,
+                'message' => $n->message,
+                'url' => $n->url,
+                'data' => $n->data,
+                'read' => (bool) $n->read,   // ← booléen
+                'created_at' => $n->created_at,
+            ]);
 
-        $unreadCount = Notification::forUser($request->user()->id)
-            ->unread()
+        $unreadCount = Notification::where('user_id', $user->id)
+            ->where('read', false)   // ← booléen
             ->count();
 
         return response()->json([
@@ -32,30 +38,23 @@ class NotificationController extends Controller
         ]);
     }
 
-    /**
-     * Compteur de notifications non lues.
-     * GET /etudiant/notifications/unread-count
-     */
     public function unreadCount(Request $request)
     {
-        $count = Notification::forUser($request->user()->id)
-            ->unread()
+        $count = Notification::where('user_id', $request->user()->id)
+            ->where('read', false)
             ->count();
 
         return response()->json([
             'success' => true,
-            'data' => $count,
+            'count' => $count,
         ]);
     }
 
-    /**
-     * Marquer une notification comme lue.
-     * POST /etudiant/notifications/{id}/read
-     */
     public function markAsRead(Request $request, $id)
     {
-        $notification = Notification::forUser($request->user()->id)
-            ->find($id);
+        $notification = Notification::where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->first();
 
         if (!$notification) {
             return response()->json([
@@ -64,51 +63,26 @@ class NotificationController extends Controller
             ], 404);
         }
 
-        $notification->update(['read' => true]);
+        $notification->markAsRead();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Notification marquée comme lue.',
-        ]);
+        return response()->json(['success' => true]);
     }
 
-    /**
-     * Marquer toutes les notifications comme lues.
-     * POST /etudiant/notifications/read-all
-     */
     public function markAllAsRead(Request $request)
     {
-        Notification::forUser($request->user()->id)
-            ->unread()
-            ->update(['read' => true]);
+        Notification::where('user_id', $request->user()->id)
+            ->where('read', false)
+            ->update(['read' => true]);   // ← booléen
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Toutes les notifications sont marquées comme lues.',
-        ]);
+        return response()->json(['success' => true]);
     }
 
-    /**
-     * Supprimer une notification.
-     * DELETE /etudiant/notifications/{id}
-     */
     public function destroy(Request $request, $id)
     {
-        $notification = Notification::forUser($request->user()->id)
-            ->find($id);
+        Notification::where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->delete();
 
-        if (!$notification) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Notification introuvable.',
-            ], 404);
-        }
-
-        $notification->delete();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Notification supprimée.',
-        ]);
+        return response()->json(['success' => true]);
     }
 }

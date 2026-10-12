@@ -283,7 +283,7 @@ public function validerUtilisateur(Request $request, $id)
     /**
      * Fermer automatiquement les vagues
      */
-    private function autoFermerVagues()
+        private function autoFermerVagues()
     {
         try {
             $today = now()->toDateString();
@@ -300,7 +300,7 @@ public function validerUtilisateur(Request $request, $id)
                     $raison = 'Date de fin dépassée';
                 }
 
-                // 2. Capacité atteinte
+                // 2. Capacité atteinte → compter uniquement les VALIDÉES
                 $nbInscrits = DB::table('inscriptions')
                     ->where('vague_id', $vague->id)
                     ->where('statut', 'valide')
@@ -340,17 +340,18 @@ public function validerUtilisateur(Request $request, $id)
     /**
      * Liste des vagues avec calcul des places restantes
      */
+    
+        /**
+     * Liste des vagues avec calcul des places restantes
+     * (compte UNIQUEMENT les inscriptions validées)
+     */
     public function listeVagues()
     {
         try {
-            // ÉTAPE 1 : Fermer automatiquement les vagues concernées
             $this->autoFermerVagues();
 
-            // ÉTAPE 2 : Récupérer les vagues
             $vagues = DB::table('vagues')->orderByDesc('id')->get();
-
             $formations = DB::table('formations')->get()->keyBy('id');
-
             $today = now()->toDateString();
 
             $vagues->transform(function ($vague) use ($formations, $today) {
@@ -359,21 +360,11 @@ public function validerUtilisateur(Request $request, $id)
                 $vague->formation_titre = $formation->titre ?? null;
                 $vague->formation_nom = $formation->nom ?? null;
 
-                // Compter les inscriptions VALIDÉES par vague_id
+                // ✅ Compter UNIQUEMENT les inscriptions VALIDÉES liées à cette vague
                 $nbInscrits = DB::table('inscriptions')
                     ->where('vague_id', $vague->id)
                     ->where('statut', 'valide')
                     ->count();
-
-                // Fallback : si aucune inscription liée à la vague_id,
-                // compter les inscriptions validées de la même formation sans vague_id
-                if ($nbInscrits === 0) {
-                    $nbInscrits = DB::table('inscriptions')
-                        ->where('formation_id', $vague->formation_id)
-                        ->whereNull('vague_id')
-                        ->where('statut', 'valide')
-                        ->count();
-                }
 
                 $vague->nb_inscrits = $nbInscrits;
                 $vague->nb_etudiants = $nbInscrits;
@@ -384,7 +375,6 @@ public function validerUtilisateur(Request $request, $id)
                 $vague->places_restantes = $placesRestantes;
                 $vague->est_complet = $placesRestantes <= 0;
 
-                // Vérifier expiration
                 $vague->est_expiree = $vague->date_fin && $vague->date_fin < $today;
 
                 // Raison de fermeture
@@ -417,7 +407,7 @@ public function validerUtilisateur(Request $request, $id)
             ], 500);
         }
     }
-
+    
     /**
      * Créer une vague
      */

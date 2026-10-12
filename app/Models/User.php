@@ -86,6 +86,12 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Partage::class);
     }
+
+    public function progressions()
+    {
+        return $this->hasMany(\App\Models\Progression::class, 'user_id');
+    }
+    
     /**
      * Amitiés (en tant qu'expéditeur ou destinataire)
      */

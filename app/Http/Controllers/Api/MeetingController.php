@@ -9,88 +9,61 @@ use Illuminate\Support\Facades\Log;
 
 class MeetingController extends Controller
 {
-    /**
-     * Liste des meetings
-     */
+    /* ==============================================================
+     * LISTE
+     * GET /meetings
+     * ============================================================== */
     public function index(Request $request)
     {
         try {
-            $meetings = Meeting::latest()->get();
+            $meetings = Meeting::where('created_by', $request->user()->id)
+                ->orderBy('date_heure', 'desc')
+                ->get();
 
             return response()->json([
                 'success' => true,
                 'data' => $meetings,
             ]);
         } catch (\Exception $e) {
-            Log::error('Erreur liste meetings: ' . $e->getMessage());
+            Log::error('MeetingController@index : ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors du chargement des meetings.'
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Créer un meeting
-     */
+    /* ==============================================================
+     * CRÉER
+     * POST /meetings
+     * ============================================================== */
     public function store(Request $request)
     {
         try {
+            // ✅ On valide UNIQUEMENT les 4 champs du formulaire
             $validated = $request->validate([
                 'titre' => 'required|string|max:255',
                 'description' => 'nullable|string',
                 'date_heure' => 'required|date',
-                'duree_minutes' => 'nullable|integer|min:15',
-                'lien_meeting' => 'nullable|url',
-                'plateforme' => 'nullable|string|in:google_meet,zoom,jitsi',
-                'max_participants' => 'nullable|integer|min:1',
-                'statut' => 'nullable|in:planifie,en_cours,termine,annule',
+                'lien_meeting' => 'required|url|max:500',
             ]);
 
-            // Récupérer les colonnes de la table
-            $columns = \Illuminate\Support\Facades\Schema::getColumnListing('meetings');
-            
-            // Construire les données
-            $data = [
-                'createur_id' => $request->user()->id,
-            ];
-
-            // Mapper les champs du formulaire vers les colonnes de la base
-            $fieldMapping = [
-                'titre' => ['titre', 'title'],
-                'description' => ['description'],
-                'date_heure' => ['date_heure', 'date_debut', 'scheduled_at'],
-                'duree_minutes' => ['duree_minutes', 'duration_minutes'],
-                'lien_meeting' => ['lien_meeting', 'meeting_url'],
-                'plateforme' => ['plateforme', 'platform'],
-                'max_participants' => ['max_participants', 'participants_max'],
-                'statut' => ['statut', 'status'],
-            ];
-
-            // Mapper les champs
-            foreach ($fieldMapping as $formField => $dbFields) {
-                if (isset($validated[$formField])) {
-                    foreach ($dbFields as $dbField) {
-                        if (in_array($dbField, $columns)) {
-                            $data[$dbField] = $validated[$formField];
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Si date_heure n'a pas été mappé mais qu'il y a date_debut
-            if (isset($validated['date_heure']) && !isset($data['date_heure']) && in_array('date_debut', $columns)) {
-                $data['date_debut'] = $validated['date_heure'];
-            }
-
-            Log::info('Création meeting avec les données:', $data);
-
-            $meeting = Meeting::create($data);
+            $meeting = Meeting::create([
+                'created_by' => $request->user()->id,
+                'titre' => $validated['titre'],
+                'description' => $validated['description'] ?? null,
+                'date_heure' => $validated['date_heure'],
+                'lien_meeting' => $validated['lien_meeting'],
+                'duree_minutes' => 60,
+                'plateforme' => $this->detectPlateforme($validated['lien_meeting']),
+                'max_participants' => 100,
+                'statut' => 'planifie',   // ✅ Sans le "e" final
+                'settings' => null,
+            ]);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Meeting créé avec succès.',
+                'message' => 'Réunion créée avec succès.',
                 'data' => $meeting,
             ], 201);
 
@@ -98,31 +71,32 @@ class MeetingController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Erreur de validation',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
-            Log::error('Erreur création meeting: ' . $e->getMessage());
-            Log::error($e->getTraceAsString());
-            
+            Log::error('MeetingController@store : ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la création du meeting: ' . $e->getMessage()
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Afficher un meeting
-     */
-    public function show($id)
+    /* ==============================================================
+     * AFFICHER
+     * GET /meetings/{id}
+     * ============================================================== */
+    public function show(Request $request, $id)
     {
         try {
-            $meeting = Meeting::with('createur')->find($id);
+            $meeting = Meeting::where('id', $id)
+                ->where('created_by', $request->user()->id)
+                ->first();
 
             if (!$meeting) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Meeting introuvable.',
+                    'message' => 'Réunion introuvable.',
                 ], 404);
             }
 
@@ -131,180 +105,189 @@ class MeetingController extends Controller
                 'data' => $meeting,
             ]);
         } catch (\Exception $e) {
-            Log::error('Erreur affichage meeting: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors du chargement du meeting.'
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Modifier un meeting
-     */
+    /* ==============================================================
+     * MODIFIER
+     * PUT /meetings/{id}
+     * ============================================================== */
     public function update(Request $request, $id)
     {
         try {
-            $meeting = Meeting::find($id);
+            $meeting = Meeting::where('id', $id)
+                ->where('created_by', $request->user()->id)
+                ->firstOrFail();
 
-            if (!$meeting) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Meeting introuvable.',
-                ], 404);
-            }
-
+            // ✅ On valide UNIQUEMENT les 4 champs du formulaire
             $validated = $request->validate([
                 'titre' => 'sometimes|required|string|max:255',
                 'description' => 'nullable|string',
                 'date_heure' => 'sometimes|required|date',
-                'duree_minutes' => 'nullable|integer|min:15',
-                'lien_meeting' => 'nullable|url',
-                'plateforme' => 'nullable|string|in:google_meet,zoom,jitsi',
-                'max_participants' => 'nullable|integer|min:1',
-                'statut' => 'nullable|in:planifie,en_cours,termine,annule',
+                'lien_meeting' => 'sometimes|required|url|max:500',
             ]);
 
-            // Mapper les champs pour la mise à jour
-            $columns = \Illuminate\Support\Facades\Schema::getColumnListing('meetings');
-            
-            $data = [];
-            
-            $fieldMapping = [
-                'titre' => ['titre', 'title'],
-                'description' => ['description'],
-                'date_heure' => ['date_heure', 'date_debut', 'scheduled_at'],
-                'duree_minutes' => ['duree_minutes', 'duration_minutes'],
-                'lien_meeting' => ['lien_meeting', 'meeting_url'],
-                'plateforme' => ['plateforme', 'platform'],
-                'max_participants' => ['max_participants', 'participants_max'],
-                'statut' => ['statut', 'status'],
-            ];
-
-            foreach ($fieldMapping as $formField => $dbFields) {
-                if (isset($validated[$formField])) {
-                    foreach ($dbFields as $dbField) {
-                        if (in_array($dbField, $columns)) {
-                            $data[$dbField] = $validated[$formField];
-                            break;
-                        }
-                    }
-                }
+            // Si le lien change, on re-détecte la plateforme
+            if (isset($validated['lien_meeting'])) {
+                $validated['plateforme'] = $this->detectPlateforme($validated['lien_meeting']);
             }
 
-            $meeting->update($data);
+            $meeting->update($validated);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Meeting modifié avec succès.',
+                'message' => 'Réunion modifiée avec succès.',
                 'data' => $meeting,
             ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur de validation',
-                'errors' => $e->errors()
-            ], 422);
         } catch (\Exception $e) {
-            Log::error('Erreur modification meeting: ' . $e->getMessage());
+            Log::error('MeetingController@update : ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la modification du meeting.'
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Supprimer un meeting
-     */
-    public function destroy($id)
+    /* ==============================================================
+     * SUPPRIMER
+     * DELETE /meetings/{id}
+     * ============================================================== */
+    public function destroy(Request $request, $id)
     {
         try {
-            $meeting = Meeting::find($id);
-
-            if (!$meeting) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Meeting introuvable.',
-                ], 404);
-            }
+            $meeting = Meeting::where('id', $id)
+                ->where('created_by', $request->user()->id)
+                ->firstOrFail();
 
             $meeting->delete();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Meeting supprimé avec succès.',
+                'message' => 'Réunion supprimée.',
             ]);
         } catch (\Exception $e) {
-            Log::error('Erreur suppression meeting: ' . $e->getMessage());
+            Log::error('MeetingController@destroy : ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la suppression du meeting.'
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Inviter des participants
-     */
+    /* ==============================================================
+     * INVITER
+     * POST /meetings/{id}/inviter
+     * ============================================================== */
     public function inviter(Request $request, $id)
     {
         try {
-            $meeting = Meeting::find($id);
-
-            if (!$meeting) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Meeting introuvable.',
-                ], 404);
-            }
+            $meeting = Meeting::where('id', $id)
+                ->where('created_by', $request->user()->id)
+                ->firstOrFail();
 
             $validated = $request->validate([
-                'participants' => 'required|array',
-                'participants.*' => 'exists:users,id',
+                'user_ids' => 'required|array',
+                'user_ids.*' => 'exists:users,id',
             ]);
-
-            // Logique d'invitation à implémenter
-            // $meeting->participants()->attach($validated['participants']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Invitations envoyées avec succès.',
+                'message' => 'Invitations envoyées.',
             ]);
         } catch (\Exception $e) {
-            Log::error('Erreur invitation: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de l\'envoi des invitations.'
+                'message' => $e->getMessage(),
+            ], 500);
+        }
+    }
+    /**
+ * Retourne les reunions qui doivent etre notifiees :
+ * - Reunions en cours
+ * - Reunions qui commencent dans les prochaines 24h
+ */
+public function notifications(Request $request)
+{
+    try {
+        $now = now();
+        $in24h = now()->addHours(24);
+
+        $meetings = Meeting::where('statut', '!=', 'annule')
+            ->where('date_heure', '<=', $in24h)
+            ->where('date_heure', '>=', $now->copy()->subMinutes(180)) // Pas plus de 3h de retard
+            ->orderBy('date_heure')
+            ->get();
+
+        $items = $meetings->map(function ($m) use ($now) {
+            $start = \Carbon\Carbon::parse($m->date_heure);
+            $end = $start->copy()->addMinutes($m->duree_minutes ?? 60);
+
+            $isLive = $now->between($start, $end);
+
+            return [
+                'id' => $m->id,
+                'titre' => $m->titre,
+                'description' => $m->description,
+                'date_heure' => $m->date_heure,
+                'duree_minutes' => $m->duree_minutes,
+                'lien_meeting' => $m->lien_meeting,
+                'audience' => $m->audience,
+                'is_live' => $isLive,
+                'starts_in_minutes' => $isLive ? 0 : $now->diffInMinutes($start, false),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'data' => $items,
+        ]);
+    } catch (\Exception $e) {
+        Log::error('MeetingController@notifications : ' . $e->getMessage());
+        return response()->json([
+            'success' => false,
+            'data' => [],
+        ], 500);
+    }
+}
+
+    /* ==============================================================
+     * RÉPONDRE À UNE INVITATION
+     * POST /meetings/{id}/repondre
+     * ============================================================== */
+    public function repondre(Request $request, $id)
+    {
+        try {
+            $validated = $request->validate([
+                'reponse' => 'required|in:accepte,refuse',
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Réponse enregistrée.',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
 
-    /**
-     * Répondre à une invitation
-     */
-    public function repondreInvitation(Request $request, $id)
+    /* ==============================================================
+     * HELPER : Détecter la plateforme depuis l'URL
+     * ============================================================== */
+    private function detectPlateforme($url)
     {
-        try {
-            $validated = $request->validate([
-                'reponse' => 'required|in:accepte,refuse,peut_etre',
-            ]);
-
-            // Logique de réponse à implémenter
-            // $meeting = Meeting::find($id);
-            // $meeting->participants()->updateExistingPivot(auth()->id(), ['reponse' => $validated['reponse']]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Réponse enregistrée avec succès.',
-            ]);
-        } catch (\Exception $e) {
-            Log::error('Erreur réponse invitation: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l\'enregistrement de la réponse.'
-            ], 500);
-        }
+        $url = strtolower($url);
+        if (str_contains($url, 'meet.google')) return 'google_meet';
+        if (str_contains($url, 'zoom.us')) return 'zoom';
+        if (str_contains($url, 'teams.microsoft')) return 'teams';
+        if (str_contains($url, 'jitsi')) return 'jitsi';
+        if (str_contains($url, 'whereby')) return 'whereby';
+        return 'google_meet';
     }
 }

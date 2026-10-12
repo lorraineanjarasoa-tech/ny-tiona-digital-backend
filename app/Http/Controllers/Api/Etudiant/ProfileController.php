@@ -4,7 +4,6 @@
 namespace App\Http\Controllers\Api\Etudiant;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -18,12 +17,18 @@ class ProfileController extends Controller
     {
         try {
             $user = $request->user()->load('profile');
-            return response()->json($user);
+
+            return response()->json([
+                'success' => true,
+                'user' => $user,
+                'data' => $user,
+            ]);
         } catch (\Exception $e) {
             Log::error('Erreur profil: ' . $e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors du chargement du profil.'
+                'message' => 'Erreur lors du chargement du profil.',
             ], 500);
         }
     }
@@ -39,29 +44,40 @@ class ProfileController extends Controller
                 'contact' => 'sometimes|string|max:20',
                 'adresse' => 'sometimes|string|max:255',
                 'bio' => 'nullable|string',
-                'photo_profil' => 'nullable|image|max:2048',
             ]);
 
             $user = $request->user();
-            
-            // Mettre à jour le profil
+
             if ($user->profile) {
                 $user->profile->update($validated);
             } else {
                 $user->profile()->create($validated);
             }
 
+            // Sync `name` sur User
+            if (isset($validated['nom_complet'])) {
+                $user->update(['name' => $validated['nom_complet']]);
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Profil mis à jour avec succès.',
-                'user' => $user->load('profile')
+                'user' => $user->fresh()->load('profile'),
             ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur de validation.',
+                'errors' => $e->errors(),
+            ], 422);
 
         } catch (\Exception $e) {
             Log::error('Erreur mise à jour profil: ' . $e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors de la mise à jour du profil.'
+                'message' => 'Erreur lors de la mise à jour du profil.',
             ], 500);
         }
     }
@@ -82,7 +98,7 @@ class ProfileController extends Controller
             if (!Hash::check($validated['current_password'], $user->password)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Mot de passe actuel incorrect.'
+                    'message' => 'Mot de passe actuel incorrect.',
                 ], 400);
             }
 
@@ -91,14 +107,15 @@ class ProfileController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Mot de passe modifié avec succès.'
+                'message' => 'Mot de passe modifié avec succès.',
             ]);
 
         } catch (\Exception $e) {
             Log::error('Erreur changement mot de passe: ' . $e->getMessage());
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur lors du changement de mot de passe.'
+                'message' => 'Erreur lors du changement de mot de passe.',
             ], 500);
         }
     }

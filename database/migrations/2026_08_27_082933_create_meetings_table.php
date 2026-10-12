@@ -15,6 +15,12 @@ return new class extends Migration
 
             $table->string('titre');
             $table->text('description')->nullable();
+
+            // ✅ NOUVEAU : audience (public / formateurs / etudiants)
+            $table->enum('audience', ['public', 'formateurs', 'etudiants'])
+                  ->default('public')
+                  ->after('description');
+
             $table->text('lien_meeting')->nullable();
             $table->string('plateforme')->default('google_meet');
             $table->timestamp('date_heure');
@@ -34,6 +40,7 @@ return new class extends Migration
             $table->index('created_by');
             $table->index('date_heure');
             $table->index('statut');
+            $table->index('audience');   // ✅ Index pour les filtres par audience
         });
     }
 

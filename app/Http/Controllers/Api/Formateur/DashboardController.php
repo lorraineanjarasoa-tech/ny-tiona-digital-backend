@@ -9,11 +9,12 @@ use App\Models\Message;
 use App\Models\Partage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
     /**
-     * Statistiques du formateur connecté.
+     * Statistiques du formateur connecte.
      * GET /formateur/dashboard/stats
      */
     public function stats(Request $request)
@@ -21,11 +22,11 @@ class DashboardController extends Controller
     try {
         $user = $request->user();
 
-        // 1. Nombre de cours créés par ce formateur
-        $coursCount = \App\Models\Cours::where('formateur_id', $user->id)->count();
+        // 1. Nombre de cours crees par ce formateur
+        $coursCount = Cours::where('formateur_id', $user->id)->count();
 
-        // 2. Nombre d'étudiants uniques (via les formations où le formateur a des cours)
-        $formationIds = \App\Models\Cours::where('formateur_id', $user->id)
+        // 2. Nombre d'etudiants uniques (via les formations ou le formateur a des cours)
+        $formationIds = Cours::where('formateur_id', $user->id)
             ->whereNotNull('formation_id')
             ->pluck('formation_id')
             ->unique()
@@ -33,43 +34,40 @@ class DashboardController extends Controller
 
         $etudiantsCount = 0;
         if ($formationIds->isNotEmpty()) {
-            $etudiantsCount = \App\Models\Inscription::whereIn('formation_id', $formationIds)
+            $etudiantsCount = Inscription::whereIn('formation_id', $formationIds)
+                ->where('statut', 'valide')
                 ->distinct('etudiant_id')
                 ->count('etudiant_id');
         }
 
-        // 3. Publications (pas de table dédiée pour le formateur → 0)
-        $publicationsCount = 0;
-
-        // 4. Messages non lus
-        $messagesCount = \DB::table('messages')
-            ->where('destinataire_id', $user->id)
-            ->where('lu', false)
-            ->count();
+        // 3. Nombre de reunions du formateur (a venir + en cours + passees)
+        $meetingsCount = \App\Models\Meeting::where('created_by', $user->id)->count();
 
         return response()->json([
             'success' => true,
-            'cours' => $coursCount,
-            'etudiants' => $etudiantsCount,
-            'publications' => $publicationsCount,
-            'messages' => $messagesCount,
+            'data' => [
+                'cours' => $coursCount,
+                'etudiants' => $etudiantsCount,
+                'meetings' => $meetingsCount,
+            ],
         ]);
     } catch (\Exception $e) {
-        \Log::error('DashboardController@stats : ' . $e->getMessage());
+        Log::error('DashboardController@stats : ' . $e->getMessage());
 
         return response()->json([
             'success' => false,
-            'cours' => 0,
-            'etudiants' => 0,
-            'publications' => 0,
-            'messages' => 0,
+            'data' => [
+                'cours' => 0,
+                'etudiants' => 0,
+                'meetings' => 0,
+            ],
             'message' => $e->getMessage(),
         ], 500);
     }
 }
 
     /**
-     * Activités récentes du formateur.
+     * Activites recentes du formateur.
      * GET /formateur/dashboard/activites
      */
     public function activites(Request $request)
@@ -78,30 +76,38 @@ class DashboardController extends Controller
             $user = $request->user();
             $activites = [];
 
-            // 1. Dernières inscriptions aux cours du formateur
-            $inscriptions = Inscription::whereHas('cours', function ($q) use ($user) {
-                $q->where('formateur_id', $user->id);
-            })
-                ->with(['user.profile', 'cours'])
-                ->latest()
-                ->limit(5)
-                ->get();
+            // 1. Dernieres inscriptions aux formations du formateur
+            $formationIds = Cours::where('formateur_id', $user->id)
+                ->whereNotNull('formation_id')
+                ->pluck('formation_id')
+                ->unique()
+                ->values();
 
-            foreach ($inscriptions as $ins) {
-                $nom = $ins->user?->profile?->nom_complet
-                    ?? $ins->user?->email
-                    ?? 'Un étudiant';
+            if ($formationIds->isNotEmpty()) {
+                $inscriptions = Inscription::whereIn('formation_id', $formationIds)
+                    ->with(['user.profile', 'formation'])
+                    ->latest()
+                    ->limit(5)
+                    ->get();
 
-                $activites[] = [
-                    'id' => 'inscription-' . $ins->id,
-                    'type' => 'inscription',
-                    'message' => "{$nom} s'est inscrit à \"{$ins->cours?->titre}\"",
-                    'url' => '/formateur/etudiants',
-                    'created_at' => $ins->created_at,
-                ];
+                foreach ($inscriptions as $ins) {
+                    $nom = $ins->user?->profile?->nom_complet
+                        ?? $ins->user?->email
+                        ?? 'Un etudiant';
+
+                    $titreFormation = $ins->formation?->titre ?? $ins->formation?->nom ?? 'une formation';
+
+                    $activites[] = [
+                        'id' => 'inscription-' . $ins->id,
+                        'type' => 'inscription',
+                        'message' => "{$nom} s'est inscrit a \"{$titreFormation}\"",
+                        'url' => '/formateur/etudiants',
+                        'created_at' => $ins->created_at,
+                    ];
+                }
             }
 
-            // 2. Derniers cours créés/mis à jour
+            // 2. Derniers cours crees/mis a jour
             $cours = Cours::where('formateur_id', $user->id)
                 ->latest('updated_at')
                 ->limit(3)
@@ -111,13 +117,29 @@ class DashboardController extends Controller
                 $activites[] = [
                     'id' => 'cours-' . $c->id,
                     'type' => 'cours',
-                    'message' => "Cours \"{$c->titre}\" mis à jour",
+                    'message' => "Cours \"{$c->titre}\" mis a jour",
                     'url' => "/formateur/mes-cours/{$c->id}",
                     'created_at' => $c->updated_at,
                 ];
             }
 
-            // 3. Derniers messages reçus
+            // 3. Dernieres publications
+            $publications = Partage::where('user_id', $user->id)
+                ->latest()
+                ->limit(3)
+                ->get();
+
+            foreach ($publications as $p) {
+                $activites[] = [
+                    'id' => 'publication-' . $p->id,
+                    'type' => 'publication',
+                    'message' => "Publication \"{$p->titre}\" creee",
+                    'url' => '/formateur/publications',
+                    'created_at' => $p->created_at,
+                ];
+            }
+
+            // 4. Derniers messages recus
             $messages = Message::where('destinataire_id', $user->id)
                 ->with('expediteur.profile')
                 ->latest()
@@ -138,7 +160,7 @@ class DashboardController extends Controller
                 ];
             }
 
-            // Tri par date décroissante
+            // Tri par date decroissante
             usort($activites, fn($a, $b) => strtotime($b['created_at']) - strtotime($a['created_at']));
 
             return response()->json([
@@ -146,7 +168,7 @@ class DashboardController extends Controller
                 'data' => array_slice($activites, 0, 10),
             ]);
         } catch (\Exception $e) {
-            Log::error('Erreur activités formateur : ' . $e->getMessage());
+            Log::error('Erreur activites formateur : ' . $e->getMessage());
 
             return response()->json([
                 'success' => true,

@@ -4,13 +4,46 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 
 class ProfileController extends Controller
 {
     /**
-     * Upload de la photo de profil
+     * GET /api/profile
+     */
+    public function show()
+    {
+        try {
+            $user = auth()->user();
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Non authentifié.',
+                ], 401);
+            }
+
+            $user->load('profile');
+
+            return response()->json([
+                'success' => true,
+                'user' => $user,
+                'data' => $user,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur show profile', ['message' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Impossible de charger le profil.',
+            ], 500);
+        }
+    }
+
+    /**
      * POST /api/profile/photo
      */
     public function uploadPhoto(Request $request)
@@ -35,7 +68,6 @@ class ProfileController extends Controller
                 Storage::disk('public')->delete($profile->photo_profil);
             }
 
-            // Sauvegarder la nouvelle
             $path = $request->file('photo')->store('photos_profil', 'public');
 
             $profile->update(['photo_profil' => $path]);
@@ -60,9 +92,7 @@ class ProfileController extends Controller
             ], 422);
 
         } catch (\Exception $e) {
-            Log::error('Erreur upload photo profil', [
-                'message' => $e->getMessage(),
-            ]);
+            Log::error('Erreur upload photo profil', ['message' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
@@ -72,7 +102,6 @@ class ProfileController extends Controller
     }
 
     /**
-     * Suppression de la photo
      * DELETE /api/profile/photo
      */
     public function deletePhoto()
@@ -100,9 +129,7 @@ class ProfileController extends Controller
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Erreur suppression photo', [
-                'message' => $e->getMessage(),
-            ]);
+            Log::error('Erreur suppression photo', ['message' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
@@ -112,7 +139,6 @@ class ProfileController extends Controller
     }
 
     /**
-     * Mise à jour des infos de profil
      * PUT /api/profile
      */
     public function update(Request $request)
@@ -145,7 +171,6 @@ class ProfileController extends Controller
 
             $profile->update($validated);
 
-            // Mettre à jour aussi le name du user
             if (isset($validated['nom_complet'])) {
                 $user->update(['name' => $validated['nom_complet']]);
             }
@@ -169,13 +194,57 @@ class ProfileController extends Controller
             ], 422);
 
         } catch (\Exception $e) {
-            Log::error('Erreur update profil', [
-                'message' => $e->getMessage(),
-            ]);
+            Log::error('Erreur update profil', ['message' => $e->getMessage()]);
 
             return response()->json([
                 'success' => false,
                 'message' => 'Impossible de mettre à jour le profil.',
+            ], 500);
+        }
+    }
+
+    /**
+     * PUT /api/profile/password
+     */
+    public function updatePassword(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'current_password' => 'required|string',
+                'new_password' => 'required|string|min:8|confirmed',
+            ]);
+
+            $user = auth()->user();
+
+            if (!Hash::check($validated['current_password'], $user->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Le mot de passe actuel est incorrect.',
+                ], 422);
+            }
+
+            $user->update([
+                'password' => Hash::make($validated['new_password']),
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mot de passe modifié avec succès.',
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur de validation.',
+                'errors' => $e->errors(),
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('Erreur update password', ['message' => $e->getMessage()]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Impossible de modifier le mot de passe.',
             ], 500);
         }
     }

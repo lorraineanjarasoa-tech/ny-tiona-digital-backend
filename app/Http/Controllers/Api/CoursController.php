@@ -20,14 +20,21 @@ class CoursController extends Controller
         ]);
     }
 
+    /**
+     * Affiche un cours spécifique.
+     * Sécurisé : seul le formateur propriétaire peut y accéder.
+     */
     public function show($id)
     {
-        $cours = Cours::with('formateur')->find($id);
+        $cours = Cours::where('formateur_id', auth()->id())
+            ->withCount('etudiants')
+            ->with('formateur')
+            ->find($id);
 
         if (!$cours) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cours introuvable.',
+                'message' => 'Cours introuvable ou accès non autorisé.',
             ], 404);
         }
 

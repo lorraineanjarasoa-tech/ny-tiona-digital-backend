@@ -23,17 +23,36 @@ class Formation extends Model
     ];
 
     protected $casts = [
-        'prix' => 'decimal:2',
         'is_active' => 'boolean',
+        'prix' => 'decimal:2',
+        'duree' => 'integer',
     ];
 
-    public function inscriptions(): HasMany
+    /* ============================================================
+     * RELATIONS
+     * ============================================================ */
+
+    /**
+     * ✅ Les cours de cette formation
+     */
+    public function cours(): HasMany
     {
-        return $this->hasMany(Inscription::class);
+        return $this->hasMany(Cours::class, 'formation_id');
     }
 
+    /**
+     * Les vagues de cette formation
+     */
     public function vagues(): HasMany
     {
-        return $this->hasMany(Vague::class);
+        return $this->hasMany(Vague::class, 'formation_id');
+    }
+
+    /**
+     * Les inscriptions à cette formation
+     */
+    public function inscriptions(): HasMany
+    {
+        return $this->hasMany(Inscription::class, 'formation_id');
     }
 }

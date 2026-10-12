@@ -8,32 +8,37 @@ use Illuminate\Http\Request;
 
 class PartageController extends Controller
 {
-    public function index()
-    {
-        $partages = Partage::latest()->get();
+    public function index(Request $request)
+{
+    $partages = Partage::with('user.profile')
+        ->visiblePour($request->user())
+        ->latest()
+        ->get();
 
+    return response()->json([
+        'success' => true,
+        'data' => $partages,
+    ]);
+}
+
+    public function show(Request $request, $id)
+{
+    $partage = Partage::with('user.profile')
+        ->visiblePour($request->user())
+        ->find($id);
+
+    if (!$partage) {
         return response()->json([
-            'success' => true,
-            'data' => $partages,
-        ]);
+            'success' => false,
+            'message' => 'Partage introuvable ou acces non autorise.',
+        ], 404);
     }
 
-    public function show($id)
-    {
-        $partage = Partage::find($id);
-
-        if (!$partage) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Partage introuvable.',
-            ], 404);
-        }
-
-        return response()->json([
-            'success' => true,
-            'data' => $partage,
-        ]);
-    }
+    return response()->json([
+        'success' => true,
+        'data' => $partage,
+    ]);
+}
 
     public function store(Request $request)
     {

@@ -24,3 +24,8 @@ Homestead.yaml
 Thumbs.db
 /bootstrap/cache/*
 !/bootstrap/cache/.gitignore
+/storage/framework/cache/*
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*

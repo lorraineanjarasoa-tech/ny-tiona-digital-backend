@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Storage;
 class PublicationsController extends Controller
 {
     /**
-     * Liste des publications du formateur connecté.
+     * Liste des publications visibles par le formateur connecté.
      * GET /formateur/publications
      */
     public function index(Request $request)
@@ -21,8 +21,9 @@ class PublicationsController extends Controller
         try {
             $user = $request->user();
 
+            // Utilise le scope visiblePour pour filtrer selon la visibilité
             $publications = Partage::with(['user.profile'])
-                ->where('user_id', $user->id)
+                ->visiblePour($user)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
@@ -50,6 +51,7 @@ class PublicationsController extends Controller
                     : null;
 
                 $data['auteur'] = $p->user;
+                $data['is_owner'] = $p->user_id === $user->id;
 
                 return $data;
             });
@@ -139,6 +141,7 @@ class PublicationsController extends Controller
                     'reactions_breakdown' => [],
                     'media_url' => $mediaPath ? asset('storage/' . $mediaPath) : null,
                     'auteur' => $publication->user,
+                    'is_owner' => true,
                 ]),
             ], 201);
         } catch (\Illuminate\Validation\ValidationException $e) {

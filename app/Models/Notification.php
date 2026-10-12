@@ -2,15 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Notification extends Model
 {
     use HasFactory;
-
-    protected $table = 'notifications';
 
     protected $fillable = [
         'user_id',
@@ -23,23 +21,16 @@ class Notification extends Model
     ];
 
     protected $casts = [
-        'read' => 'boolean',
         'data' => 'array',
+        'read' => 'boolean',
     ];
 
-    /* ------------------------------------------------------------------
-     * RELATIONS
-     * ------------------------------------------------------------------ */
-
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    /* ------------------------------------------------------------------
-     * SCOPES
-     * ------------------------------------------------------------------ */
-
+    /* Scopes */
     public function scopeUnread($query)
     {
         return $query->where('read', false);
@@ -50,60 +41,14 @@ class Notification extends Model
         return $query->where('user_id', $userId);
     }
 
-    /* ------------------------------------------------------------------
-     * STATIC HELPERS
-     * ------------------------------------------------------------------ */
-
-    /**
-     * Créer une notification pour un utilisateur.
-     */
-    public static function notify(
-        string $userId,
-        string $type,
-        string $title,
-        ?string $message = null,
-        ?string $url = null,
-        ?array $data = null
-    ): self {
-        return static::create([
-            'user_id' => $userId,
-            'type' => $type,
-            'title' => $title,
-            'message' => $message,
-            'url' => $url,
-            'read' => false,
-            'data' => $data,
-        ]);
+    /* Helpers */
+    public function markAsRead(): void
+    {
+        $this->update(['read' => true]);
     }
 
-    /**
-     * Envoyer à plusieurs utilisateurs.
-     */
-    public static function notifyMany(
-        array $userIds,
-        string $type,
-        string $title,
-        ?string $message = null,
-        ?string $url = null,
-        ?array $data = null
-    ): int {
-        $rows = [];
-        $now = now();
-
-        foreach ($userIds as $id) {
-            $rows[] = [
-                'user_id' => $id,
-                'type' => $type,
-                'title' => $title,
-                'message' => $message,
-                'url' => $url,
-                'read' => false,
-                'data' => $data ? json_encode($data) : null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-
-        return static::insert($rows) ? count($rows) : 0;
+    public function isRead(): bool
+    {
+        return (bool) $this->read;
     }
 }

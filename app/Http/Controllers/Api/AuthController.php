@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\PasswordResetCode;
+use App\Models\Formation;
+use App\Models\Vague;
+use App\Models\Inscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -39,7 +42,7 @@ class AuthController extends Controller
                 'preference_cours' => 'nullable|string|max:255',
                 'reference_bancaire' => 'nullable|string|max:255',
 
-                // Fichiers (optionnels mais traités)
+                // Fichiers
                 'cin_recto' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'cin_verso' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
                 'diplome' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
@@ -111,6 +114,73 @@ class AuthController extends Controller
              * ============================================ */
             $profile = $user->profile()->create($profileData);
 
+            /* ============================================
+             * CRÉATION AUTOMATIQUE DE L'INSCRIPTION
+             * (uniquement pour les étudiants avec préférence de cours)
+             * ============================================ */
+            if (
+                $validated['role'] === 'etudiant'
+                && !empty($validated['preference_cours'])
+            ) {
+                try {
+                    // 1. Trouver la formation par titre (recherche exacte puis partielle)
+                    $formation = Formation::where('titre', $validated['preference_cours'])->first();
+
+                    if (!$formation) {
+                        $formation = Formation::where('titre', 'ILIKE', '%' . $validated['preference_cours'] . '%')->first();
+                    }
+
+                    // 2. Trouver une vague active pour cette formation
+                    $vague = null;
+                    if ($formation) {
+                        $vague = Vague::where('formation_id', $formation->id)
+                            ->whereIn('statut', ['ouverte', 'en_cours'])
+                            ->latest()
+                            ->first();
+
+                        // Si aucune vague active, prendre la plus récente
+                        if (!$vague) {
+                            $vague = Vague::where('formation_id', $formation->id)
+                                ->latest()
+                                ->first();
+                        }
+                    }
+
+                    // 3. Créer l'inscription
+                    if ($formation) {
+                        $inscription = Inscription::create([
+                            'etudiant_id' => $user->id,
+                            'formation_id' => $formation->id,
+                            'vague_id' => $vague?->id,
+                            'statut' => 'en_attente',
+                            'date_inscription' => now(),
+                        ]);
+
+                        Log::info('Inscription créée automatiquement', [
+                            'user_id' => $user->id,
+                            'inscription_id' => $inscription->id,
+                            'formation_id' => $formation->id,
+                            'formation_titre' => $formation->titre,
+                            'vague_id' => $vague?->id,
+                            'vague_num' => $vague?->num_vague,
+                        ]);
+                    } else {
+                        Log::warning('Formation non trouvée pour preference_cours', [
+                            'preference' => $validated['preference_cours'],
+                            'user_id' => $user->id,
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    // On ne bloque pas l'inscription si la création d'inscription échoue
+                    Log::error('Erreur création inscription auto', [
+                        'message' => $e->getMessage(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                        'user_id' => $user->id,
+                    ]);
+                }
+            }
+
             Log::info('Inscription réussie', [
                 'user_id' => $user->id,
                 'profile_id' => $profile->id,
@@ -138,35 +208,29 @@ class AuthController extends Controller
             ], 422);
 
         } catch (\Exception $e) {
-    Log::error('Erreur inscription', [
-        'message' => $e->getMessage(),
-        'file' => $e->getFile(),
-        'line' => $e->getLine(),
-        'trace' => $e->getTraceAsString(),
-    ]);
+            Log::error('Erreur inscription', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
 
-    return response()->json([
-        'success' => false,
-        'message' => 'Erreur lors de l\'inscription.',
-        'debug' => [
-            'message' => $e->getMessage(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine(),
-        ],
-    ], 500);
-            }
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'inscription.',
+                'debug' => [
+                    'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ],
+            ], 500);
+        }
     }
 
     /**
      * =====================================================
      * LOGIN
      * =====================================================
-     *
-     * Champs attendus :
-     *  - login_method : email ou telephone
-     *  - identifier   : email ou numéro
-     *  - password     : mot de passe
-     *  - role         : admin, formateur ou etudiant
      */
     public function login(Request $request)
     {
@@ -180,7 +244,6 @@ class AuthController extends Controller
 
             $identifier = trim($validated['identifier']);
 
-            // Recherche par email ou téléphone
             if ($validated['login_method'] === 'email') {
                 $user = User::where('email', strtolower($identifier))->first();
             } else {
@@ -189,7 +252,6 @@ class AuthController extends Controller
                 })->first();
             }
 
-            // Compte introuvable ou mauvais mot de passe
             if (!$user || !Hash::check($validated['password'], $user->password)) {
                 return response()->json([
                     'success' => false,
@@ -197,7 +259,6 @@ class AuthController extends Controller
                 ], 401);
             }
 
-            // Vérification du rôle
             if ($user->role !== $validated['role']) {
                 return response()->json([
                     'success' => false,
@@ -205,7 +266,6 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            // Admin : connexion directe. Autres : doivent être validés.
             if ($user->role !== 'admin' && !$user->is_validated) {
                 return response()->json([
                     'success' => false,
@@ -368,7 +428,6 @@ class AuthController extends Controller
                     ->first();
             }
 
-            // Ne pas révéler si le compte existe
             if (!$user) {
                 return response()->json([
                     'success' => true,
@@ -376,7 +435,6 @@ class AuthController extends Controller
                 ]);
             }
 
-            // Supprimer les anciens codes non utilisés
             PasswordResetCode::where('user_id', $user->id)
                 ->whereNull('used_at')
                 ->delete();
@@ -404,7 +462,6 @@ class AuthController extends Controller
                     }
                 );
             } else {
-                // SMS pas encore connecté : log pour dev
                 Log::info('Code récupération téléphone généré', [
                     'user_id' => $user->id,
                     'telephone' => $identifier,

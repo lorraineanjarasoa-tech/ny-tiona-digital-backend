@@ -22,7 +22,6 @@ class Cours extends Model
         'document',
         'image',
         'niveau',
-        'duree_heures',
         'ordre',
         'statut',
         'est_visible',
@@ -31,31 +30,36 @@ class Cours extends Model
 
     protected $casts = [
         'ordre' => 'integer',
-        'duree_heures' => 'integer',
         'est_visible' => 'boolean',
         'date_publication' => 'datetime',
     ];
 
     /* ------------------------------------------------------------------
      * Accessors (compatibilité frontend)
-     * ------------------------------------------------------------------
-     * Le frontend utilise `description`, `duree`, `is_active`
-     * → on les mappe automatiquement vers les vraies colonnes.
-     */
+     * ------------------------------------------------------------------ */
 
     public function getDescriptionAttribute()
     {
         return $this->description_courte;
     }
 
-    public function getDureeAttribute()
-    {
-        return $this->duree_heures;
-    }
-
     public function getIsActiveAttribute()
     {
         return (bool) $this->est_visible;
+    }
+
+    /**
+     * Nombre d'étudiants inscrits à la formation de ce cours.
+     */
+    public function getEtudiantsCountAttribute(): int
+    {
+        if (!$this->formation_id) {
+            return 0;
+        }
+
+        return \App\Models\Inscription::where('formation_id', $this->formation_id)
+            ->whereIn('statut', ['valide', 'accepte', 'approuve'])
+            ->count();
     }
 
     /* ------------------------------------------------------------------

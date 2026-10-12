@@ -27,34 +27,38 @@ use App\Http\Controllers\Api\Etudiant\DashboardController as EtudiantDashboardCo
 use App\Http\Controllers\Api\Etudiant\FormationController as EtudiantFormationController;
 use App\Http\Controllers\Api\Etudiant\InscriptionController as EtudiantInscriptionController;
 use App\Http\Controllers\Api\Etudiant\CoursController as EtudiantCoursController;
-use App\Http\Controllers\Api\Etudiant\PaiementController;
+use App\Http\Controllers\Api\Etudiant\PaiementController as EtudiantPaiementController;
 use App\Http\Controllers\Api\Etudiant\PartageController as EtudiantPartageController;
-use App\Http\Controllers\Api\Etudiant\ProfileController;
+use App\Http\Controllers\Api\Etudiant\ProfileController as EtudiantProfileController;
 use App\Http\Controllers\Api\Etudiant\AiAssistantController;
 use App\Http\Controllers\Api\Etudiant\FriendController;
-use App\Http\Controllers\Api\Etudiant\ExamenController;
-use App\Http\Controllers\Api\Etudiant\NotificationController;
+use App\Http\Controllers\Api\Etudiant\ExamenController as EtudiantExamenController;
+use App\Http\Controllers\Api\Etudiant\NotificationController as EtudiantNotificationController;
 
 // ===================================================
 // CONTROLLERS FORMATEUR
 // ===================================================
 
 use App\Http\Controllers\Api\Formateur\ExamenController as FormateurExamenController;
-use App\Http\Controllers\Api\Formateur\DashboardController;
+use App\Http\Controllers\Api\Formateur\DashboardController as FormateurDashboardController;
 use App\Http\Controllers\Api\Formateur\CoursController as FormateurCoursController;
 use App\Http\Controllers\Api\Formateur\PublicationsController as FormateurPublicationsController;
+use App\Http\Controllers\Api\Formateur\ProfileController as FormateurProfileController;
 
 // ===================================================
 // CONTROLLERS ADMIN
 // ===================================================
 
-use App\Http\Controllers\Api\Admin\InscriptionController;
+use App\Http\Controllers\Api\Admin\InscriptionController as AdminInscriptionController;
+use App\Http\Controllers\Api\Admin\PublicationController as AdminPublicationController;
+use App\Http\Controllers\Api\Admin\PaiementController as AdminPaiementController;
 
 // ===================================================
 // AUTRES CONTROLLERS
 // ===================================================
 
 use App\Http\Controllers\Api\ForgotPasswordController;
+use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\PublicController;
 
 
@@ -111,6 +115,20 @@ Route::middleware(['auth:api'])->group(function () {
     Route::post('/refresh-token', [AuthController::class, 'refresh']);
     Route::get('/check', [AuthController::class, 'check']);
 
+    // Notifications reunions (pour tous les roles)
+    Route::get('/meetings/notifications', [MeetingController::class, 'notifications']);
+
+    // =================================================
+    // PHOTO DE PROFIL — ACCESSIBLE À TOUS LES RÔLES
+    // =================================================
+
+    Route::prefix('profile')->group(function () {
+        Route::get('/', [ProfileController::class, 'show']);
+        Route::put('/', [ProfileController::class, 'update']);
+        Route::put('/password', [ProfileController::class, 'updatePassword']);
+        Route::post('/photo', [ProfileController::class, 'uploadPhoto']);
+        Route::delete('/photo', [ProfileController::class, 'deletePhoto']);
+    });
 
     // =================================================
     // AMIS — ACCESSIBLE À TOUS (étudiants ET formateurs)
@@ -128,7 +146,6 @@ Route::middleware(['auth:api'])->group(function () {
         Route::delete('/{userId}', [FriendController::class, 'retirer']);
     });
 
-
     // =================================================
     // PARTAGES — ACTIONS
     // =================================================
@@ -140,7 +157,6 @@ Route::middleware(['auth:api'])->group(function () {
         Route::post('/{id}/view', [EtudiantPartageController::class, 'view']);
     });
 
-
     // =================================================
     // ADMIN
     // =================================================
@@ -149,16 +165,16 @@ Route::middleware(['auth:api'])->group(function () {
         ->prefix('admin')
         ->group(function () {
 
-            Route::get('/dashboard/stats', [InscriptionController::class, 'stats']);
+            Route::get('/dashboard/stats', [AdminInscriptionController::class, 'stats']);
 
             // Inscriptions
-            Route::get('/inscriptions', [InscriptionController::class, 'index']);
-            Route::get('/inscriptions/en-attente', [InscriptionController::class, 'enAttente']);
-            Route::get('/inscriptions/recentes', [InscriptionController::class, 'recentes']);
-            Route::get('/inscriptions/stats', [InscriptionController::class, 'stats']);
-            Route::put('/inscriptions/{id}/valider', [InscriptionController::class, 'valider']);
-            Route::put('/inscriptions/{id}/rejeter', [InscriptionController::class, 'rejeter']);
-            Route::post('/inscriptions/{id}/notifier-paiement', [InscriptionController::class, 'notifierPaiement']);
+            Route::get('/inscriptions', [AdminInscriptionController::class, 'index']);
+            Route::get('/inscriptions/en-attente', [AdminInscriptionController::class, 'enAttente']);
+            Route::get('/inscriptions/recentes', [AdminInscriptionController::class, 'recentes']);
+            Route::get('/inscriptions/stats', [AdminInscriptionController::class, 'stats']);
+            Route::put('/inscriptions/{id}/valider', [AdminInscriptionController::class, 'valider']);
+            Route::put('/inscriptions/{id}/rejeter', [AdminInscriptionController::class, 'rejeter']);
+            Route::post('/inscriptions/{id}/notifier-paiement', [AdminInscriptionController::class, 'notifierPaiement']);
 
             // Utilisateurs
             Route::get('/utilisateurs', [AdminController::class, 'listeUtilisateurs']);
@@ -183,16 +199,17 @@ Route::middleware(['auth:api'])->group(function () {
             Route::get('/profile', [AdminController::class, 'getProfil']);
             Route::put('/profile', [AdminController::class, 'updateProfil']);
             Route::put('/profile/password', [AdminController::class, 'updatePassword']);
-            Route::middleware('auth:api')->group(function () {
-            Route::post('/profile/photo', [\App\Http\Controllers\Api\ProfileController::class, 'uploadPhoto']);
-            Route::delete('/profile/photo', [\App\Http\Controllers\Api\ProfileController::class, 'deletePhoto']);
-            Route::put('/profile', [\App\Http\Controllers\Api\ProfileController::class, 'update']);
-        });
 
             // Notifications
             Route::get('/notifications', [AdminController::class, 'notifications']);
             Route::post('/notifications/read-all', [AdminController::class, 'markAllNotificationsAsRead']);
             Route::post('/notifications/{id}/read', [AdminController::class, 'markNotificationAsRead']);
+
+            // Publications / Annonces
+            Route::get('/publications', [AdminPublicationController::class, 'index']);
+            Route::post('/publications', [AdminPublicationController::class, 'store']);
+            Route::post('/publications/{id}', [AdminPublicationController::class, 'update']);
+            Route::delete('/publications/{id}', [AdminPublicationController::class, 'destroy']);
 
             // Settings
             Route::get('/settings', [AdminController::class, 'getSettings']);
@@ -207,13 +224,20 @@ Route::middleware(['auth:api'])->group(function () {
             Route::get('/reports', [AdminController::class, 'reports']);
             Route::patch('/reports/{id}', [AdminController::class, 'updateReport']);
 
+            // Paiements
+            Route::prefix('paiements')->group(function () {
+                Route::get('/', [AdminPaiementController::class, 'index']);
+                Route::put('/{id}/valider', [AdminPaiementController::class, 'valider']);
+                Route::put('/{id}/rejeter', [AdminPaiementController::class, 'rejeter']);
+                Route::get('/{id}/preuve', [AdminPaiementController::class, 'voirPreuve']);
+            });
+
             // Cache
             Route::post('/cache/clear', [AdminController::class, 'clearCache']);
 
             // Export
             Route::get('/export', [AdminController::class, 'exportData']);
         });
-
 
     // =================================================
     // FORMATEUR
@@ -224,13 +248,14 @@ Route::middleware(['auth:api'])->group(function () {
         ->group(function () {
 
             // Dashboard
-            Route::get('/dashboard/stats', [DashboardController::class, 'stats']);
-            Route::get('/dashboard/activites', [DashboardController::class, 'activites']);
-            Route::get('/profil', [ProfileController::class, 'show']);
+            Route::get('/dashboard/stats', [FormateurDashboardController::class, 'stats']);
+            Route::get('/dashboard/activites', [FormateurDashboardController::class, 'activites']);
+            Route::get('/profil', [FormateurProfileController::class, 'show']);
 
             // Cours
             Route::get('/mes-cours', [FormateurCoursController::class, 'index']);
             Route::post('/cours', [FormateurCoursController::class, 'store']);
+            Route::get('/cours/{id}', [FormateurCoursController::class, 'show']);
             Route::put('/cours/{id}', [FormateurCoursController::class, 'update']);
             Route::delete('/cours/{id}', [FormateurCoursController::class, 'destroy']);
 
@@ -243,7 +268,7 @@ Route::middleware(['auth:api'])->group(function () {
             Route::put('/publications/{id}', [FormateurPublicationsController::class, 'update']);
             Route::delete('/publications/{id}', [FormateurPublicationsController::class, 'destroy']);
 
-            // Ancienne route publication (à garder si utilisée ailleurs)
+            // Ancienne route publication
             Route::post('/publication', [FormateurController::class, 'publier']);
 
             // Examens
@@ -263,7 +288,6 @@ Route::middleware(['auth:api'])->group(function () {
                 Route::delete('/questions/{questionId}', [FormateurExamenController::class, 'deleteQuestion']);
             });
         });
-
 
     // =================================================
     // ETUDIANT
@@ -286,14 +310,17 @@ Route::middleware(['auth:api'])->group(function () {
             Route::get('/cours/{id}', [EtudiantCoursController::class, 'show']);
 
             // Paiements
-            Route::get('/paiements', [PaiementController::class, 'index']);
-            Route::get('/paiements/statut', [PaiementController::class, 'statut']);
-            Route::post('/paiements', [PaiementController::class, 'store']);
+            Route::prefix('paiements')->group(function () {
+                Route::get('/', [EtudiantPaiementController::class, 'index']);
+                Route::post('/', [EtudiantPaiementController::class, 'store']);
+                Route::get('/statut', [EtudiantPaiementController::class, 'statut']);
+            });
 
             // Profil
-            Route::get('/profil', [ProfileController::class, 'show']);
-            Route::put('/profil', [ProfileController::class, 'update']);
-            Route::put('/profil/password', [ProfileController::class, 'updatePassword']);
+            Route::get('/profil', [EtudiantProfileController::class, 'show']);
+            Route::put('/profil', [EtudiantProfileController::class, 'update']);
+            Route::put('/profil/password', [EtudiantProfileController::class, 'updatePassword']);
+            Route::get('/utilisateur/{id}', [\App\Http\Controllers\Api\Etudiant\PublicProfileController::class, 'show']);
 
             // Partages
             Route::post('/partage', [EtudiantPartageController::class, 'store']);
@@ -301,29 +328,32 @@ Route::middleware(['auth:api'])->group(function () {
             Route::put('/partage/{id}', [EtudiantPartageController::class, 'update']);
             Route::delete('/partage/{id}', [EtudiantPartageController::class, 'destroy']);
 
+            // Progression des cours
+            Route::prefix('progression')->group(function () {
+                Route::post('/{coursId}', [\App\Http\Controllers\Api\Etudiant\ProgressionController::class, 'update']);
+                Route::get('/formation/{formationId}', [\App\Http\Controllers\Api\Etudiant\ProgressionController::class, 'formationProgress']);
+            });
+
             // Assistant IA
             Route::post('/ai/chat', [AiAssistantController::class, 'chat']);
 
-            // ⚠️ Routes "amis" SUPPRIMÉES d'ici — elles sont maintenant au niveau global
-
             // Examens
             Route::prefix('examens')->group(function () {
-                Route::get('/', [ExamenController::class, 'index']);
-                Route::get('/{id}', [ExamenController::class, 'show']);
-                Route::post('/{id}/soumettre', [ExamenController::class, 'soumettre']);
-                Route::get('/{id}/resultat', [ExamenController::class, 'resultat']);
+                Route::get('/', [EtudiantExamenController::class, 'index']);
+                Route::get('/{id}', [EtudiantExamenController::class, 'show']);
+                Route::post('/{id}/soumettre', [EtudiantExamenController::class, 'soumettre']);
+                Route::get('/{id}/resultat', [EtudiantExamenController::class, 'resultat']);
             });
 
             // Notifications
             Route::prefix('notifications')->group(function () {
-                Route::get('/', [NotificationController::class, 'index']);
-                Route::get('/unread-count', [NotificationController::class, 'unreadCount']);
-                Route::post('/read-all', [NotificationController::class, 'markAllAsRead']);
-                Route::post('/{id}/read', [NotificationController::class, 'markAsRead']);
-                Route::delete('/{id}', [NotificationController::class, 'destroy']);
+                Route::get('/', [EtudiantNotificationController::class, 'index']);
+                Route::get('/unread-count', [EtudiantNotificationController::class, 'unreadCount']);
+                Route::post('/read-all', [EtudiantNotificationController::class, 'markAllAsRead']);
+                Route::post('/{id}/read', [EtudiantNotificationController::class, 'markAsRead']);
+                Route::delete('/{id}', [EtudiantNotificationController::class, 'destroy']);
             });
         });
-
 
     // =================================================
     // COURS — UTILISATEURS CONNECTÉS
@@ -331,7 +361,6 @@ Route::middleware(['auth:api'])->group(function () {
 
     Route::get('/cours', [CoursController::class, 'index']);
     Route::get('/cours/{id}', [CoursController::class, 'show']);
-
 
     // =================================================
     // CHAT
@@ -344,7 +373,6 @@ Route::middleware(['auth:api'])->group(function () {
         Route::put('/message/{id}/read', [ChatController::class, 'markAsRead']);
         Route::get('/non-lus', [ChatController::class, 'messagesNonLus']);
     });
-
 
     // =================================================
     // MEETINGS
